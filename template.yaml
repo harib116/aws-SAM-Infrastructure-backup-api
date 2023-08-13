@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  micrologx-devops
+
+  Sample SAM Template for micrologx-devops
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+    Tracing: Active
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        stage: devops
+  Api:
+    TracingEnabled: True
+
+Resources:
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: IAM Role for managing DevOPS based lambdas (BackupRDS)
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+        - arn:aws:iam::aws:policy/AmazonRDSReadOnlyAccess
+        # CodepipelineJob
+        - arn:aws:iam::aws:policy/AWSCodePipelineCustomActionAccess
+      Policies:
+        - PolicyName: rdsbackupwrite
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds:CreateDBClusterSnapshot
+                Resource:
+                  - "*"
+
+
+  RDSBackupFn:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: backup_rds/
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      # Events:
+      #   default:
+      #     Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+      #     Properties:
+      #       Path: /backup-rds
+      #       Method: get
+      Description: Script for creating RDS snapshot
+      Role: !GetAtt LambdaRole.Arn
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  # BackupRDSApi:
+  #   Description: "API Gateway endpoint URL for Prod stage for RDSBackup function"
+  #   Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/backup-rds/"
+  RDSBackupFn:
+    Description: "RDS Backup Lambda Function ARN"
+    Value: !GetAtt RDSBackupFn.Arn
+  RDSBackupFnIamRole:
+    Description: "Implicit IAM Role created for RDS Backup function"
+    Value: !GetAtt LambdaRole.Arn
